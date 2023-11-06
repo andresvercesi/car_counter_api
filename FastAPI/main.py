@@ -6,105 +6,138 @@ import numpy as np
 from PIL import Image
 import os
 from ultralytics import YOLO
+from vidgear.gears import CamGear
+
+def results_count(inference_results):
+    results_dict = {}
+    for result in inference_results:
+        detection_count = result.boxes.shape[0]        
+        for i in range(detection_count):
+            cls = int(result.boxes.cls[i].item())
+            name = result.names[cls]
+            if name in results_dict:
+                results_dict[name] +=1
+            else:
+                results_dict[name] =1
+            #confidence = float(result.boxes.conf[i].item())
+            #bounding_box = result.boxes.xyxy[i].cpu().numpy()
+
+            #x = int(bounding_box[0])
+            #y = int(bounding_box[1])
+            #width = int(bounding_box[2] - x)
+            #height = int(bounding_box[3] - y)
+    return results_dict 
+
+def results_show(inference_results):
+    for result in inference_results:
+        im_array = result.plot()  # plot a BGR numpy array of predictions
+        im = Image.fromarray(im_array[..., ::-1])  # RGB PIL image
+        im.show()  # show image
+
 
 modelYOLO = YOLO('yolov8n.pt')  # Load pretrained YOLOv8n model
 
-def object_detection(image):
-    pred = model(image)
-    #xmin,ymin,xmax,ymax
-    df=pred.pandas().xyxy[0]
-    #Filter by confidence
-    df=df[df["confidence"]>0.01]
-    df2=df.groupby(['name'])['name'].count()
-    json_data = df2.to_dict()
-    return json_data
-
-
-
 app = FastAPI()
 
-""" @app.get("/objects_count_local")
+@app.get("/objects_count_local_image")
 async def objects_detect(path: str):
-    image = cv2.imread(path)
-    pred = model(image)
-    #xmin,ymin,xmax,ymax
-    df=pred.pandas().xyxy[0]
-    #Filter by confidence
-    df=df[df["confidence"]>0.01]
-    df2=df.groupby(['name'])['name'].count()
-    
-    for i in range(df.shape[0]):
-        bbox = df.iloc[i][["xmin","ymin","xmax","ymax"]].values.astype(int)
-        #Draw Bounding Box
-        cv2.rectangle(image, (bbox[0], bbox[1]),(bbox[2],bbox[3]), (255,0,0), 2)
-        #Print object class
-        cv2.putText(image,
-                    f"{df.iloc[i]['name']}: {round(df.iloc[i]['confidence'],4)}",
-                    (bbox[0], bbox[1]-15),
-                    cv2.FONT_HERSHEY_PLAIN,
-                    1,
-                    (255,255,255),
-                    2)
-    cv2.imshow("image", image)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
-    json_data = df2.to_dict()
-    #json_data = df[['class', 'name']].to_json(orient='records')
-    return json_data """
-
-@app.post("/object_count_load/")
-async def load_image(imagefile: UploadFile = File(...)):
-    
-    folder = 'load_images'
-    if not os.path.exists(folder):
-        os.mkdir(folder)
-    
-    complete_path = os.path.join(folder, imagefile.filename)
-
-    with open(complete_path, "wb") as f:
-        f.write(imagefile.file.read())
-
-    image = cv2.imread(complete_path)
-    cv2.imshow("image", image)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
-    result = object_detection(image)
-    print(result)
-
-    return {
-        "nombre": imagefile.filename,
-        "tipo": imagefile.content_type,
-        "tamaño": len(imagefile.file.read()),
-    }
-
-""" @app.get("/objects_count_local_fast")
-async def objects_detect(path: str):
-    image = cv2.imread(path)
-    pred = model(image)
-    #xmin,ymin,xmax,ymax
-    df=pred.pandas().xyxy[0]
-    #Filter by confidence
-    df=df[df["confidence"]>0.01]
-    df2=df.groupby(['name'])['name'].count()
-    json_data = df2.to_dict()
-    #json_data = df[['class', 'name']].to_json(orient='records')
-    return json_data """
-
-@app.get("/objects_count_local_fast")
-async def objects_detect(path: str):
-    image = cv2.imread(path)
     # Run batched inference on a list of images
     results = modelYOLO.predict(path, classes=2, conf=0.25)  # return a list of Results objects
-    return results[0].tojson()
+    return results_count(results)
 
-@app.get("/objects_count_local")
+@app.get("/objects_count_url_image")
+async def objects_detect(url: str):
+    url = 'https://'+url
+    # Run batched inference on a list of images
+    results = modelYOLO.predict(url, conf=0.25)  # return a list of Results objects
+    os.remove(results[0].path)
+    return results_count(results)
+
+@app.get("/objects_count_show_local_image")
 async def objects_detect(path: str):
-    image = cv2.imread(path)
     # Run batched inference on a list of images
     results = modelYOLO.predict(path, classes=2, conf=0.25)  # return a list of Results objects
-    for r in results:
-        im_array = r.plot()  # plot a BGR numpy array of predictions
-        im = Image.fromarray(im_array[..., ::-1])  # RGB PIL image
-        im.show()  # show image
-        print(r.probs)
-    return r.tojson()
+    results_show(results)
+    return results_count(results)
+
+@app.get("/objects_count_show_url_image")
+async def objects_detect(url: str):
+    url = 'https://'+url
+    # Run batched inference on a list of images
+    results = modelYOLO.predict(url, conf=0.25)  # return a list of Results objects
+    results_show(results)
+    os.remove(results[0].path)
+    return results_count(results)
+
+@app.get("/objects_count_stream")
+async def objects_detect(path: str):
+    video_path = path
+    cap = cv2.VideoCapture(path)
+    # Loop through the video frames
+    i = 0
+    while cap.isOpened():
+        # Read a frame from the video
+        success, frame = cap.read()
+        i=i+1
+        if success:
+            # Run YOLOv8 inference on the frame
+            if i%1000==0:
+                results = modelYOLO(frame)
+
+                # Visualize the results on the frame
+                annotated_frame = results[0].plot()
+
+                # Display the annotated frame
+                cv2.imshow("YOLOv8 Inference", annotated_frame)
+
+            # Break the loop if 'q' is pressed
+            if cv2.waitKey(1) & 0xFF == ord("q"):
+                break
+        else:
+            # Break the loop if the end of the video is reached
+            break
+    # Release the video capture object and close the display window
+    cap.release()
+    cv2.destroyAllWindows()
+    return
+
+@app.get("/objects_count_youtube")
+async def objects_detect(url: str):
+    url = 'https://'+url
+    stream = CamGear(source=url, stream_mode = True, logging=True, **options_stream).start() # YouTube Video URL as input
+    i=0
+    while True:
+        frame = stream.read()
+        i=i+1
+        # read frames
+        # check if frame is None
+        if frame is None:
+            #if True break the infinite loop
+            break
+        
+        if i%100==0:
+            results = modelYOLO(frame)
+
+            # Visualize the results on the frame
+            annotated_frame = results[0].plot()
+
+            # Display the annotated frame
+            cv2.imshow("YOLOv8 Inference", annotated_frame)
+
+        # do something with frame here
+    
+        #cv2.imshow("Output Frame", frame)
+        # Show output window
+
+        key = cv2.waitKey(1) & 0xFF
+        # check for 'q' key-press
+        if key == ord("q"):
+            #if 'q' key-pressed break out
+            break
+
+    cv2.destroyAllWindows()
+    # close output window
+
+    # safely close video stream.
+    stream.stop()
+    return
