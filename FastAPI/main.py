@@ -1,5 +1,6 @@
 from email.mime import image
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, BackgroundTasks
+from fastapi.responses import FileResponse
 import cv2
 import torch
 import numpy as np
@@ -34,18 +35,23 @@ def results_show(inference_results):
         im = Image.fromarray(im_array[..., ::-1])  # RGB PIL image
         im.show()  # show image
 
+def remove_file(path:str) -> None:
+    os.remove(path)
 
 modelYOLO = YOLO('yolov8n.pt')  # Load pretrained YOLOv8n model
 
 app = FastAPI()
 
-@app.get("/objects_count_local_image")
-async def objects_detect(path: str):
-    # Run batched inference on a list of images
-    results = modelYOLO.predict(path, classes=2, conf=0.25)  # return a list of Results objects
+@app.post("/objects_detection_count_local_image")
+async def post_media_file(file: UploadFile):
+    with open(file.filename, 'wb') as disk_file:
+        file_bytes = await file.read()
+        disk_file.write(file_bytes)
+    results = modelYOLO.predict(disk_file.name, conf=0.25)  # return a list of Results objects
+    remove_file(disk_file.name)
     return results_count(results)
 
-@app.get("/objects_count_url_image")
+@app.get("/objects_detection_count_url_image")
 async def objects_detect(url: str):
     url = 'https://'+url
     # Run batched inference on a list of images
@@ -53,21 +59,36 @@ async def objects_detect(url: str):
     os.remove(results[0].path)
     return results_count(results)
 
-@app.get("/objects_count_show_local_image")
-async def objects_detect(path: str):
-    # Run batched inference on a list of images
-    results = modelYOLO.predict(path, classes=2, conf=0.25)  # return a list of Results objects
-    results_show(results)
-    return results_count(results)
+@app.post("/objects_detection_show_local_image")
+async def post_media_file(file: UploadFile):
+    path_result=''
+    file_name=''
+    with open(file.filename, 'wb') as disk_file:
+        file_bytes = await file.read()
+        disk_file.write(file_bytes)
+    results = modelYOLO.predict(disk_file.name, conf=0.25, save=True)  # return a list of Results objects
+    remove_file(disk_file.name)
+    file_name = (os.path.basename(results[0].path))
+    path_result = results[0].save_dir+"/"+file_name
+    tasks = BackgroundTasks()
+    tasks.add_task(remove_file, path=path_result)
+    return FileResponse(path_result, background=tasks)
 
-@app.get("/objects_count_show_url_image")
+
+@app.get("/objects_detection_show_url_image")
 async def objects_detect(url: str):
+    results = 0
     url = 'https://'+url
     # Run batched inference on a list of images
-    results = modelYOLO.predict(url, conf=0.25)  # return a list of Results objects
-    results_show(results)
-    os.remove(results[0].path)
-    return results_count(results)
+    results = modelYOLO.predict(url, conf=0.25, save=True)  # return a list of Results objects
+    #results_show(results)
+    file_name = (os.path.basename(results[0].path))
+    path_result = results[0].save_dir+"/"+file_name
+    print(path_result)
+    remove_file(file_name)
+    tasks = BackgroundTasks()
+    tasks.add_task(remove_file, path=path_result)
+    return FileResponse(path_result, background=tasks)
 
 @app.get("/objects_count_stream")
 async def objects_detect(path: str):
@@ -101,7 +122,7 @@ async def objects_detect(path: str):
     cv2.destroyAllWindows()
     return
 
-@app.get("/objects_count_youtube")
+""" @app.get("/objects_count_youtube")
 async def objects_detect(url: str):
     url = 'https://'+url
     stream = CamGear(source=url, stream_mode = True, logging=True, **options_stream).start() # YouTube Video URL as input
@@ -140,4 +161,4 @@ async def objects_detect(url: str):
 
     # safely close video stream.
     stream.stop()
-    return
+    return """
