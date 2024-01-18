@@ -1,2 +1,7 @@
 Venv/
+runs/
+FastAPI/__pycache__/
+Data/
+*.jpg
+*.pyc
  
