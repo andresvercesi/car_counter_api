@@ -91,8 +91,8 @@ async def count_objects_file(file: UploadFile,
 async def count_objects_url(url: str, 
                             class_filter : Annotated[list[int] | None, Query()] = None,
                             conf : float = 0.25):
-    new_url = url.replace("https://", "") # 👉️ Remove "https" from URL
-    print(new_url) # 👉️ Print
+    #new_url = url.replace("https://", "") # 👉️ Remove "https" from URL
+    #print(new_url) # 👉️ Print
     #url = 'https://'+url
     # Run batched inference on a list of images
     results = modelYOLO.predict(url, conf=conf, classes=class_filter)  # return a list of Results objects
@@ -101,17 +101,18 @@ async def count_objects_url(url: str,
 
 @app.post("/objects_detection_show_local_image")
 async def show_objects_file(file: UploadFile,
-                             class_filter : Annotated[list[int] | None, Query()] = None,
-                             conf : float = 0.25):
+                            class_filter : Annotated[list[int] | None, Query()] = None,
+                            conf : float = 0.25):
     path_result=''
     file_name=''
     with open(file.filename, 'wb') as disk_file:
         file_bytes = await file.read()
         disk_file.write(file_bytes)
-    results = modelYOLO.predict(disk_file.name, conf=conf, save=True, classes= class_names)  # return a list of Results objects
-    remove_file(disk_file.name)
+    results = modelYOLO.predict(disk_file.name, conf=conf, save=True, classes= class_filter)  # return a list of Results objects
+    #remove_file(disk_file.name)
     file_name = (os.path.basename(results[0].path))
     path_result = results[0].save_dir+"/"+file_name
+    remove_file(file_name)
     tasks = BackgroundTasks()
     tasks.add_task(remove_file, path=path_result)
     return FileResponse(path_result, background=tasks)
@@ -123,12 +124,10 @@ async def show_objects_url(url: str,
                             conf : float = 0.25):
     results = 0
     response = requests.get(url)
-    with open("image.jpg", "wb") as f:
-        f.write(response.content)
-
-    #url = 'https://'+url
-    # Run batched inference on a list of images
-    results = modelYOLO.predict("image.jpg", conf=conf, save=True, classes=class_filter)  # return a list of Results objects
+    with open("image.jpg", "wb") as disk_file:
+        disk_file.write(response.content)
+    results = modelYOLO.predict(disk_file.name, conf=conf, save=True, classes=class_filter)  # return a list of Results objects
+    #remove_file(disk_file.name)
     #results_show(results)
     file_name = (os.path.basename(results[0].path))
     path_result = results[0].save_dir+"/"+file_name
@@ -169,6 +168,25 @@ async def objects_detect(path: str, class_filter : int = None):
     cap.release()
     cv2.destroyAllWindows()
     return
+
+@app.get("/objects_count_local_video")
+async def objects_detect(path: str, 
+                        class_filter : Annotated[list[int] | None, Query()] = None,
+                        conf : float = 0.25):
+    frame_set_no = 50
+    results = 0
+    video_path = path
+    cap = cv2.VideoCapture(path)
+    cap.set(cv2.CAP_PROP_POS_FRAMES, frame_set_no)
+    success, frame = cap.read()
+    results = modelYOLO.predict(frame, conf=conf, save=True, classes= class_filter)  # return a list of Results objects
+    file_name = (os.path.basename(results[0].path))
+    path_result = results[0].save_dir+"/"+file_name
+    tasks = BackgroundTasks()
+    tasks.add_task(remove_file, path=path_result)
+    return FileResponse(path_result, background=tasks)
+   
+
 
 """ @app.get("/objects_count_youtube")
 async def objects_detect(url: str):
