@@ -62,7 +62,12 @@ def remove_file(path:str) -> None:
 
     Returns:
     """
+    folder = os.path.dirname(path)
     os.remove(path)
+    try:
+        os.rmdir(folder)
+    except OSError as e:
+        print(f'Error trying delete folder: {e}')
 
 modelYOLO = YOLO('yolov8n.pt')  # Load pretrained YOLOv8n model
 
@@ -70,16 +75,25 @@ app = FastAPI()
 
 @app.get("/")
 async def readme():
+    '''
+    Return a API name and description
+    '''
     return ("Object count with YOLO Model API - Go to /docs to see API documentation")
 
 @app.get("/class_names")
 async def class_names():
+    '''
+    Return a list of classes 
+    '''
     return (modelYOLO.names)
 
 @app.post("/objects_detection_count_local_image")
 async def count_objects_file(file: UploadFile, 
                             class_filter : Annotated[list[int] | None, Query()] = None,
                             conf : float = 0.25):
+    '''
+    Return a list of objects detected in a image file with quantities
+    '''
     with open(file.filename, 'wb') as disk_file:
         file_bytes = await file.read()
         disk_file.write(file_bytes)
@@ -91,6 +105,9 @@ async def count_objects_file(file: UploadFile,
 async def count_objects_url(url: str, 
                             class_filter : Annotated[list[int] | None, Query()] = None,
                             conf : float = 0.25):
+    '''
+    Return a list of objects detected in a url image with quantities
+    '''
     #new_url = url.replace("https://", "") # 👉️ Remove "https" from URL
     #print(new_url) # 👉️ Print
     #url = 'https://'+url
@@ -103,6 +120,9 @@ async def count_objects_url(url: str,
 async def show_objects_file(file: UploadFile,
                             class_filter : Annotated[list[int] | None, Query()] = None,
                             conf : float = 0.25):
+    '''
+    Return a image with bounding box around objects detected in a image file
+    '''
     path_result=''
     file_name=''
     with open(file.filename, 'wb') as disk_file:
@@ -122,6 +142,9 @@ async def show_objects_file(file: UploadFile,
 async def show_objects_url(url: str, 
                             class_filter : Annotated[list[int] | None, Query()] = None,
                             conf : float = 0.25):
+    '''
+    Return a image with bounding box around objects detected in a url image
+    '''
     results = 0
     response = requests.get(url)
     with open("image.jpg", "wb") as disk_file:
@@ -173,7 +196,7 @@ async def objects_detect(path: str, class_filter : int = None):
 async def objects_detect(path: str, 
                         class_filter : Annotated[list[int] | None, Query()] = None,
                         conf : float = 0.25):
-    frame_set_no = 50
+    frame_set_no = 150
     results = 0
     video_path = path
     cap = cv2.VideoCapture(path)
@@ -185,6 +208,23 @@ async def objects_detect(path: str,
     tasks = BackgroundTasks()
     tasks.add_task(remove_file, path=path_result)
     return FileResponse(path_result, background=tasks)
+
+@app.get("/objects_count_webcam")
+async def objects_detect(path: str, 
+                        class_filter : Annotated[list[int] | None, Query()] = None,
+                        conf : float = 0.25):
+    frame_set_no = 50
+    results = 0
+    video_path = path
+    cap = cv2.VideoCapture(path)
+    cap.set(cv2.CAP_PROP_POS_FRAMES, frame_set_no)
+    success, frame = cap.read()
+    results = modelYOLO.predict(frame, conf=conf, save=True, classes= class_filter)  # return a list of Results objects
+    file_name = (os.path.basename(results[0].path))
+    path_result = results[0].save_dir+"/"+file_name
+    tasks = BackgroundTasks()
+    tasks.add_task(remove_file, path=path_result)
+    return FileResponse(results, background=tasks)
    
 
 
