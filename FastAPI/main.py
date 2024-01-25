@@ -108,11 +108,11 @@ async def count_objects_url(url: str,
     '''
     Return a list of objects detected in a url image with quantities
     '''
-    #new_url = url.replace("https://", "") # 👉️ Remove "https" from URL
-    #print(new_url) # 👉️ Print
-    #url = 'https://'+url
+    response = requests.get(url)
+    with open("image.jpg", "wb") as disk_file:
+        disk_file.write(response.content)
     # Run batched inference on a list of images
-    results = modelYOLO.predict(url, conf=conf, classes=class_filter)  # return a list of Results objects
+    results = modelYOLO.predict(disk_file.name, conf=conf, classes=class_filter)  # return a list of Results objects
     os.remove(results[0].path)
     return results_count(results)
 
