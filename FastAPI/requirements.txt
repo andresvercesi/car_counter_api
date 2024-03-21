@@ -4,7 +4,7 @@ opencv_python==4.8.0.76
 Pillow==10.2.0
 Requests==2.31.0
 torch==2.0.1
-ultralytics==8.0.171
+ultralytics==8.1.30
 vidgear==0.3.2
 uvicorn==0.27.0
 python-multipart==0.0.6
