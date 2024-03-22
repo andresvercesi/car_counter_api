@@ -17,7 +17,7 @@ from functions import remove_file, remove_folder, results_count, results_show
 #modelYOLO8n = YOLO('models\yolov8n.pt')  # Load pretrained YOLOv8n model
 #modelYOLO8s = YOLO('models\yolov8s.pt')  # Load pretrained YOLOv8s model
 #modelYOLO8m = YOLO('models\yolov8m.pt')  # Load pretrained YOLOv8m model
-model = YOLO('models\yolov9c.pt')  # Load pretrained YOLOv9c model
+model = YOLO('yolov9c.pt')  # Load pretrained YOLOv9c model
 
 
 app = FastAPI()
